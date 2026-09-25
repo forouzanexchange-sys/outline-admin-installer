@@ -149,6 +149,19 @@ cd /opt/outline-admin && (
 
 ---
 
+## 🛡️ لایه‌های امنیتی خودکار
+
+اسکریپت این کارها رو **به صورت خودکار** انجام می‌ده:
+
+- ✅ **UFW Firewall**: فقط پورت‌های 22، 80، 443 باز می‌شن
+- ✅ **Fail2ban**: IP های مشکوک بعد از ۵ تلاش ناموفق، ۱ ساعت بلاک می‌شن
+- ✅ **SSL خودکار**: Caddy گواهی Let's Encrypt رو خودکار مدیریت می‌کنه
+- ✅ **Bind داخلی**: پنل admin فقط از `127.0.0.1:3000` در دسترسه (از بیرون فقط از طریق HTTPS)
+- ✅ **پسورد قوی**: ۴۸ کاراکتر hex به صورت تصادفی تولید می‌شه
+- ✅ **فایل credentials**: با `chmod 0600` محافظت می‌شه
+
+---
+
 ## 🛠️ دستورات مفید
 
 بعد از نصب، می‌تونی از این دستورات استفاده کنی:
@@ -168,6 +181,15 @@ cd /opt/outline-admin && sudo docker compose restart
 
 # توقف سرویس‌ها
 cd /opt/outline-admin && sudo docker compose down
+
+# وضعیت فایروال
+sudo ufw status numbered
+
+# وضعیت Fail2ban (SSH)
+sudo fail2ban-client status sshd
+
+# آنبن کردن یه IP
+sudo fail2ban-client set sshd unbanip 1.2.3.4
 ```
 
 ---
@@ -177,12 +199,13 @@ cd /opt/outline-admin && sudo docker compose down
 ```
 /opt/outline-admin/
 ├── Caddyfile              # پیکربندی Reverse Proxy
-├── docker-compose.yml     # تعریف سرویس‌ها
+├── compose.yaml           # تعریف سرویس‌ها
 ├── credentials.txt        # اطلاعات ورود (محرمانه)
 └── volumes/
     ├── caddy_data/        # گواهی‌های SSL
     ├── caddy_config/      # پیکربندی Caddy
-    └── admin_data/        # داده‌های OutlineAdmin
+    ├── admin_data/        # داده‌های OutlineAdmin
+    └── admin_logs/        # لاگ‌های OutlineAdmin
 ```
 
 ---
@@ -232,6 +255,23 @@ sudo cat /opt/outline-admin/credentials.txt
 ```
 
 اگه رمز رو تغییر داده بودی، از دستور [تغییر رمز](#-تغییر-رمز-ورود-پنل) استفاده کن.
+
+</details>
+
+<details>
+<summary><b>🔴 IP من توسط Fail2ban بلاک شده</b></summary>
+
+اگه IP خودت رو اشتباهی بلاک کردی:
+
+```bash
+sudo fail2ban-client set sshd unbanip YOUR_IP
+```
+
+برای دیدن لیست IP های بلاک‌شده:
+
+```bash
+sudo fail2ban-client status sshd
+```
 
 </details>
 
