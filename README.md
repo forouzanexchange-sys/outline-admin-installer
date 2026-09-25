@@ -33,6 +33,7 @@
 ### 🔐 امنیت پیشرفته
 - **SSL خودکار** با Let's Encrypt
 - ورود فقط با **رمز عبور** (بدون نیاز به نام کاربری)
+- **پسورد سفارشی** یا خودکار (انتخاب با کاربر)
 - تغییر رمز بدون ذخیره در تاریخچه شل
 - `credentials.txt` با دسترسی محدود
 
@@ -43,9 +44,9 @@
 
 ### 🎯 سادگی استفاده
 - نصب با **یک دستور**
+- انتخاب پسورد در هنگام نصب
 - دریافت اطلاعات ورود در پایان نصب
 - دستور تغییر رمز به‌صورت تعاملی
-- مناسب برای سرورهای تازه و تمیز
 
 </td>
 <td width="50%">
@@ -70,10 +71,25 @@
 curl -fsSL https://raw.githubusercontent.com/forouzanexchange-sys/outline-admin-installer/main/install.sh -o install.sh && bash -n install.sh && sudo bash install.sh
 ```
 
-هنگام نصب، اسکریپت ازت **دامنه** رو می‌پرسه. مثلاً:
+### 📝 در هنگام نصب، اسکریپت اینا رو می‌پرسه:
+
+| # | سؤال | توضیح |
+|---|------|-------|
+| ۱ | 🌐 **دامنه** | مثل `outline.yourdomain.com` |
+| ۲ | 🔑 **پسورد سفارشی؟** | `y` بزنی، خودت وارد می‌کنی / `n` بزنی، خودکار تولید می‌شه |
+
+**نمونه‌ی اجرا:**
+
 ```
-outline.yourdomain.com
+Enter your domain (example: panel.example.com): outline.qforo.xyz
+
+Do you want to set a custom panel password? [y/N]: y
+Enter new password (min 8 chars): ●●●●●●●●●●
+Confirm password: ●●●●●●●●●●
+[INFO] Custom password set successfully.
 ```
+
+اگه `n` بزنی یا Enter بزنی، اسکریپت خودش یه پسورد قوی ۴۸ کاراکتری hex تولید می‌کنه.
 
 ---
 
@@ -155,9 +171,10 @@ cd /opt/outline-admin && (
 
 - ✅ **UFW Firewall**: فقط پورت‌های 22، 80، 443 باز می‌شن
 - ✅ **Fail2ban**: IP های مشکوک بعد از ۵ تلاش ناموفق، ۱ ساعت بلاک می‌شن
+- ✅ **سازگاری UFW + Docker**: قوانین `DOCKER-USER` خودکار تنظیم می‌شن تا کانتینرها به API های خارجی دسترسی داشته باشن
 - ✅ **SSL خودکار**: Caddy گواهی Let's Encrypt رو خودکار مدیریت می‌کنه
 - ✅ **Bind داخلی**: پنل admin فقط از `127.0.0.1:3000` در دسترسه (از بیرون فقط از طریق HTTPS)
-- ✅ **پسورد قوی**: ۴۸ کاراکتر hex به صورت تصادفی تولید می‌شه
+- ✅ **پسورد قوی**: ۴۸ کاراکتر hex به صورت تصادفی تولید می‌شه (یا سفارشی)
 - ✅ **فایل credentials**: با `chmod 0600` محافظت می‌شه
 
 ---
@@ -214,7 +231,13 @@ sudo fail2ban-client set sshd unbanip 1.2.3.4
 
 1. پنل را در مرورگر باز کن: `https://outline.yourdomain.com`
 2. با رمزی که در `credentials.txt` ذخیره شده وارد شو
-3. اطلاعات API سرور Outline خودت را در پنل اضافه کن
+3. دکمه **Add Server** را بزن
+4. گزینه **Existing Server** را انتخاب کن
+5. خروجی JSON نصب Outline Server را پیست کن:
+   ```json
+   {"apiUrl":"https://SERVER_IP:PORT/PATH","certSha256":"..."}
+   ```
+6. دکمه **Add Server** را بزن
 
 ---
 
@@ -272,6 +295,51 @@ sudo fail2ban-client set sshd unbanip YOUR_IP
 ```bash
 sudo fail2ban-client status sshd
 ```
+
+</details>
+
+<details>
+<summary><b>🟣 خطای Server Error هنگام Add Server</b></summary>
+
+اگه موقع اضافه کردن سرور Outline، خطای `Server Components render` گرفتی، احتمالاً قوانین UFW مانع ارتباط Docker با API سرور Outline شدن.
+
+**راه‌حل:**
+
+```bash
+# بررسی اینکه قوانین Docker در UFW هست یا نه
+grep "BEGIN UFW AND DOCKER" /etc/ufw/after.rules
+
+# اگه خالی بود، یعنی قوانین نیستن. اسکریپت رو دوباره اجرا کن
+# یا این دستور رو دستی بزن:
+sudo sed -i 's/DEFAULT_FORWARD_POLICY="DROP"/DEFAULT_FORWARD_POLICY="ACCEPT"/' /etc/default/ufw
+
+sudo tee -a /etc/ufw/after.rules > /dev/null <<'EOF'
+
+# BEGIN UFW AND DOCKER
+*filter
+:ufw-user-forward - [0:0]
+:DOCKER-USER - [0:0]
+-A DOCKER-USER -j RETURN -s 10.0.0.0/8
+-A DOCKER-USER -j RETURN -s 172.16.0.0/12
+-A DOCKER-USER -j RETURN -s 192.168.0.0/16
+-A DOCKER-USER -j ufw-user-forward
+-A DOCKER-USER -j DROP -p tcp -m tcp --tcp-flags FIN,SYN,RST,ACK SYN -d 192.168.0.0/16
+-A DOCKER-USER -j DROP -p tcp -m tcp --tcp-flags FIN,SYN,RST,ACK SYN -d 10.0.0.0/8
+-A DOCKER-USER -j DROP -p tcp -m tcp --tcp-flags FIN,SYN,RST,ACK SYN -d 172.16.0.0/12
+-A DOCKER-USER -j DROP -p udp -m udp --dport 0:32767 -d 192.168.0.0/16
+-A DOCKER-USER -j DROP -p udp -m udp --dport 0:32767 -d 10.0.0.0/8
+-A DOCKER-USER -j DROP -p udp -m udp --dport 0:32767 -d 172.16.0.0/12
+-A DOCKER-USER -j RETURN
+COMMIT
+# END UFW AND DOCKER
+EOF
+
+sudo ufw reload
+sudo systemctl restart docker
+cd /opt/outline-admin && sudo docker compose restart
+```
+
+بعد دوباره سرور رو اضافه کن.
 
 </details>
 
