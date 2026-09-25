@@ -1,75 +1,273 @@
-# OutlineAdmin Installer
+<div align="center">
 
-نصب OutlineAdmin به همراه Caddy برای دسترسی امن HTTPS به پنل مدیریت.
+# 🛡️ OutlineAdmin Installer
 
-این اسکریپت خود Outline Server را نصب نمی‌کند. پس از نصب، اطلاعات API سرور Outline خود را در پنل اضافه کنید.
+**نصب خودکار و امن OutlineAdmin روی سرور شخصی شما**
 
-## پیش‌نیازها
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Ubuntu](https://img.shields.io/badge/Ubuntu-22.04%20%7C%2024.04-E95420?logo=ubuntu&logoColor=white)](https://ubuntu.com/)
+[![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
+[![Caddy](https://img.shields.io/badge/Caddy-1F88C0?logo=caddy&logoColor=white)](https://caddyserver.com/)
 
-- سرور تازه Ubuntu 22.04 یا 24.04
-- دسترسی root یا sudo
-- دامنه یا زیردامنه با رکورد A متصل به IPv4 سرور
-- پورت‌های TCP 80 و 443 آزاد و قابل‌دسترسی باشند
+یک اسکریپت کامل برای نصب OutlineAdmin روی VPS شخصی، با SSL خودکار و دسترسی امن HTTPS.
 
-اگر برای دامنه رکورد AAAA دارید، اتصال IPv6 سرور باید سالم باشد.
+</div>
 
-## نصب
+---
 
-هشدار: این اسکریپت با دسترسی مدیریتی اجرا می‌شود. فقط روی سرور تازه و بدون پنل فعال نصب کنید.
+## ✨ ویژگی‌ها
 
-دستور زیر را در ترمینال سرور اجرا کنید:
+<table>
+<tr>
+<td width="50%">
 
-    curl -fsSL https://raw.githubusercontent.com/forouzanexchange-sys/outline-admin-installer/main/install.sh -o install.sh && bash -n install.sh && sudo bash install.sh
+### 🐳 استقرار خودکار
+- نصب خودکار **Docker** و **Docker Compose**
+- آخرین نسخه پایدار **OutlineAdmin**
+- وب‌سرور سبک **Caddy** به عنوان Reverse Proxy
+- نصب idempotent (اجرای مجدد خراب نمی‌شه)
 
-هنگام درخواست، دامنه خود را وارد کنید.
+</td>
+<td width="50%">
 
-## ورود به پنل
+### 🔐 امنیت پیشرفته
+- **SSL خودکار** با Let's Encrypt
+- ورود فقط با **رمز عبور** (بدون نیاز به نام کاربری)
+- تغییر رمز بدون ذخیره در تاریخچه شل
+- `credentials.txt` با دسترسی محدود
 
-در پایان نصب، آدرس پنل و رمز ورود نمایش داده می‌شوند.
+</td>
+</tr>
+<tr>
+<td width="50%">
 
-نام کاربری لازم نیست؛ فقط رمز را وارد کنید.
+### 🎯 سادگی استفاده
+- نصب با **یک دستور**
+- دریافت اطلاعات ورود در پایان نصب
+- دستور تغییر رمز به‌صورت تعاملی
+- مناسب برای سرورهای تازه و تمیز
 
-برای مشاهده اطلاعات ورود ذخیره‌شده هنگام نصب، این دستور را اجرا کنید:
+</td>
+<td width="50%">
 
-    sudo cat /opt/outline-admin/credentials.txt
+### 📊 مدیریت آسان
+- مشاهده وضعیت سرویس‌ها با یک دستور
+- لاگ‌های Caddy در دسترس
+- پنل مدیریتی سبک و سریع
+- بدون نیاز به تنظیمات پیچیده
 
-رمز و فایل اطلاعات ورود را منتشر نکنید. اگر رمز را تغییر داده باشید، این فایل ممکن است همچنان رمز قبلی را نشان دهد.
+</td>
+</tr>
+</table>
 
-## تغییر رمز ورود پنل
+---
 
-تمام دستور چندخطی زیر را یک‌جا در ترمینال سرور اجرا کنید. سپس رمز جدید را وارد کرده و Enter بزنید. رمز هنگام تایپ نمایش داده نمی‌شود.
+## ⚡ نصب سریع
 
-    cd /opt/outline-admin && (
-      IFS= read -r -s -p 'New password: ' NEW_PASSWORD
-      printf '\n'
-      if [ -z "$NEW_PASSWORD" ]; then
-        printf 'Password must not be empty.\n'
-        exit 1
-      fi
-      sudo docker compose exec -T admin npm run password:change -- "$NEW_PASSWORD"
-    )
+فقط کافیه این یه دستور رو روی VPS تازه و تمیز (Ubuntu 22.04 یا 24.04) اجرا کنی:
 
-پیام Password updated successfully. تأیید می‌کند رمز تغییر کرده است. سپس با رمز جدید وارد پنل شوید.
+```bash
+curl -fsSL https://raw.githubusercontent.com/forouzanexchange-sys/outline-admin-installer/main/install.sh -o install.sh && bash -n install.sh && sudo bash install.sh
+```
 
-نکات امنیتی:
+هنگام نصب، اسکریپت ازت **دامنه** رو می‌پرسه. مثلاً:
+```
+outline.yourdomain.com
+```
 
-- رمز واردشده در تاریخچه دستورات شِل ذخیره نمی‌شود.
-- npm ممکن است رمز را در خروجی ترمینال نمایش دهد؛ خروجی یا تصویر آن را منتشر نکنید.
-- فایل /opt/outline-admin/credentials.txt با این دستور خودکار به‌روز نمی‌شود.
-- ویرایش credentials.txt به‌تنهایی رمز واقعی پنل را تغییر نمی‌دهد.
+---
 
-## بررسی وضعیت سرویس‌ها
+## 📋 پیش‌نیازها
 
-این دستور را در ترمینال سرور اجرا کنید:
+<div align="center">
 
-    cd /opt/outline-admin && sudo docker compose ps
+| مورد | حداقل | توصیه‌شده |
+|:---:|:---:|:---:|
+| 🐧 **سیستم‌عامل** | Ubuntu 22.04 | Ubuntu 24.04 |
+| 💾 **رم** | 1 GB | 2 GB |
+| 💿 **فضا** | 5 GB | 10 GB |
+| 🌐 **دامنه** | A Record به IPv4 | A + AAAA |
+| 🔓 **پورت‌ها** | 80, 443 | 22, 80, 443 |
 
-## مشاهده لاگ Caddy
+</div>
 
-این دستور را در ترمینال سرور اجرا کنید:
+### 🌐 تنظیم DNS
 
-    cd /opt/outline-admin && sudo docker compose logs --tail=80 caddy
+قبل از اجرا، مطمئن شو رکورد DNS دامنه‌ت به IP سرور اشاره می‌کنه:
 
-## پس از نصب
+```
+نوع: A (یا AAAA برای IPv6)
+نام: outline
+مقدار: IP سرور VPS
+TTL: خودکار
+```
 
-پنل را در مرورگر باز کنید، وارد شوید و اطلاعات API سرور Outline خود را اضافه کنید.
+> ⚠️ **نکته:** این اسکریپت **خود Outline Server را نصب نمی‌کند**. پس از نصب، اطلاعات API سرور Outline خود را در پنل اضافه کنید.
+
+---
+
+## 🚪 ورود به پنل
+
+در پایان نصب، **آدرس پنل** و **رمز ورود** نمایش داده می‌شن.
+
+> 💡 **نام کاربری لازم نیست؛ فقط رمز را وارد کنید.**
+
+برای مشاهده اطلاعات ورود ذخیره‌شده هنگام نصب:
+
+```bash
+sudo cat /opt/outline-admin/credentials.txt
+```
+
+> 🔒 رمز و فایل اطلاعات ورود را منتشر نکنید.
+
+---
+
+## 🔑 تغییر رمز ورود پنل
+
+تمام دستور چندخطی زیر را **یک‌جا** در ترمینال سرور اجرا کنید. سپس رمز جدید را وارد کرده و Enter بزنید. **رمز هنگام تایپ نمایش داده نمی‌شود.**
+
+```bash
+cd /opt/outline-admin && (
+  IFS= read -r -s -p 'New password: ' NEW_PASSWORD
+  printf '\n'
+  if [ -z "$NEW_PASSWORD" ]; then
+    printf 'Password must not be empty.\n'
+    exit 1
+  fi
+  sudo docker compose exec -T admin npm run password:change -- "$NEW_PASSWORD"
+)
+```
+
+پیام **`Password updated successfully.`** تأیید می‌کند رمز تغییر کرده است. سپس با رمز جدید وارد پنل شوید.
+
+### ⚠️ نکات امنیتی
+
+- ✅ رمز واردشده در **تاریخچه دستورات شل ذخیره نمی‌شود**
+- ⚠️ `npm` ممکن است رمز را در خروجی ترمینال نمایش دهد؛ **خروجی یا تصویر آن را منتشر نکنید**
+- ℹ️ فایل `/opt/outline-admin/credentials.txt` با این دستور **خودکار به‌روز نمی‌شود**
+- ℹ️ ویرایش `credentials.txt` به‌تنهایی رمز واقعی پنل را تغییر نمی‌دهد
+
+---
+
+## 🛠️ دستورات مفید
+
+بعد از نصب، می‌تونی از این دستورات استفاده کنی:
+
+```bash
+# بررسی وضعیت سرویس‌ها
+cd /opt/outline-admin && sudo docker compose ps
+
+# مشاهده لاگ Caddy
+cd /opt/outline-admin && sudo docker compose logs --tail=80 caddy
+
+# مشاهده لاگ Admin
+cd /opt/outline-admin && sudo docker compose logs --tail=80 admin
+
+# ری‌استارت سرویس‌ها
+cd /opt/outline-admin && sudo docker compose restart
+
+# توقف سرویس‌ها
+cd /opt/outline-admin && sudo docker compose down
+```
+
+---
+
+## 📁 ساختار پروژه
+
+```
+/opt/outline-admin/
+├── Caddyfile              # پیکربندی Reverse Proxy
+├── docker-compose.yml     # تعریف سرویس‌ها
+├── credentials.txt        # اطلاعات ورود (محرمانه)
+└── volumes/
+    ├── caddy_data/        # گواهی‌های SSL
+    ├── caddy_config/      # پیکربندی Caddy
+    └── admin_data/        # داده‌های OutlineAdmin
+```
+
+---
+
+## 🔧 پس از نصب
+
+1. پنل را در مرورگر باز کن: `https://outline.yourdomain.com`
+2. با رمزی که در `credentials.txt` ذخیره شده وارد شو
+3. اطلاعات API سرور Outline خودت را در پنل اضافه کن
+
+---
+
+## ❓ عیب‌یابی
+
+<details>
+<summary><b>🔴 صفحه پنل باز نمی‌شه</b></summary>
+
+- مطمئن شو دامنه به IP سرور اشاره می‌کنه: `dig AAAA your-domain.com +short`
+- لاگ Caddy رو ببین: `cd /opt/outline-admin && sudo docker compose logs --tail=80 caddy`
+- مطمئن شو پورت‌های 80 و 443 از بیرون قابل دسترسن
+
+</details>
+
+<details>
+<summary><b>🟡 خطای 502 Bad Gateway</b></summary>
+
+- مطمئن شو سرویس admin در حال اجراست: `cd /opt/outline-admin && sudo docker compose ps`
+- اگه تازه راه افتاده، ۳۰ ثانیه صبر کن
+- اگه بازم مشکل داره: `cd /opt/outline-admin && sudo docker compose restart admin`
+
+</details>
+
+<details>
+<summary><b>🟠 SSL دریافت نشد</b></summary>
+
+- مطمئن شو دامنه به IP سرور اشاره می‌کنه
+- اگه دامنه تو Cloudflare هست، موقتاً پروکسی (ابر نارنجی) رو خاموش کن
+- مطمئن شو پورت 80 از بیرون قابل دسترسیه
+
+</details>
+
+<details>
+<summary><b>🔵 رمز ورود رو فراموش کردم</b></summary>
+
+```bash
+sudo cat /opt/outline-admin/credentials.txt
+```
+
+اگه رمز رو تغییر داده بودی، از دستور [تغییر رمز](#-تغییر-رمز-ورود-پنل) استفاده کن.
+
+</details>
+
+---
+
+## 📜 مجوز
+
+این پروژه تحت مجوز **MIT** منتشر شده است.
+
+---
+
+<div align="center">
+
+### ✦ نویسندگان اسکریپت ✦
+
+<table>
+<tr>
+<td align="center" width="50%">
+
+### 🌟 کیومرث فروزان
+
+*معمار و طراح اسکریپت*
+
+</td>
+<td align="center" width="50%">
+
+### 🌟 آرش
+
+*توسعه‌دهنده و پیاده‌ساز*
+
+</td>
+</tr>
+</table>
+
+<br>
+
+⭐ اگه این پروژه به کارت اومد، یه ستاره بده
+
+</div>
