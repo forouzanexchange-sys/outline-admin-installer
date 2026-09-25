@@ -91,6 +91,58 @@ ask_domain() {
   exec 3>&-
 }
 
+ask_password() {
+  local choice value confirm
+
+  if ! { exec 4<>/dev/tty; } 2>/dev/null; then
+    die "An interactive terminal is required."
+  fi
+
+  printf '\nDo you want to set a custom panel password? [y/N]: ' >&4
+  IFS= read -r choice <&4 || choice=""
+
+  choice="${choice,,}"
+  choice="${choice//[[:space:]]/}"
+
+  if [[ "$choice" != "y" && "$choice" != "yes" ]]; then
+    exec 4>&-
+    PASSWORD="$(openssl rand -hex 24)"
+    info "Password will be auto-generated (48 hex characters)."
+    return
+  fi
+
+  while true; do
+    printf 'Enter new password (min 8 chars): ' >&4
+    IFS= read -r -s value <&4 || { exec 4>&-; die "Could not read password."; }
+    printf '\n' >&4
+
+    if (( ${#value} < 8 )); then
+      printf 'Password must be at least 8 characters. Try again.\n' >&4
+      continue
+    fi
+
+    if (( ${#value} > 128 )); then
+      printf 'Password must be at most 128 characters. Try again.\n' >&4
+      continue
+    fi
+
+    printf 'Confirm password: ' >&4
+    IFS= read -r -s confirm <&4 || { exec 4>&-; die "Could not read confirmation."; }
+    printf '\n' >&4
+
+    if [[ "$value" != "$confirm" ]]; then
+      printf 'Passwords do not match. Try again.\n' >&4
+      continue
+    fi
+
+    PASSWORD="$value"
+    break
+  done
+
+  exec 4>&-
+  info "Custom password set successfully."
+}
+
 install_docker() {
   if command -v docker >/dev/null 2>&1; then
     info "Using the existing Docker installation."
@@ -150,13 +202,10 @@ setup_firewall() {
     DEBIAN_FRONTEND=noninteractive apt-get install -y ufw
   fi
 
-  # Allow SSH first to prevent lockout
   ufw allow 22/tcp comment 'SSH' >/dev/null
-  # Allow HTTP and HTTPS for Caddy
   ufw allow 80/tcp comment 'HTTP - Caddy' >/dev/null
   ufw allow 443/tcp comment 'HTTPS - Caddy' >/dev/null
 
-  # Enable firewall non-interactively
   if ! ufw status | grep -q "Status: active"; then
     ufw --force enable >/dev/null
     info "UFW enabled with rules: 22, 80, 443."
@@ -172,7 +221,6 @@ setup_fail2ban() {
     DEBIAN_FRONTEND=noninteractive apt-get install -y fail2ban
   fi
 
-  # Write a simple jail.local for SSH protection
   if [[ ! -f /etc/fail2ban/jail.local ]]; then
     cat > /etc/fail2ban/jail.local <<'F2B'
 [DEFAULT]
@@ -192,6 +240,45 @@ F2B
   systemctl restart fail2ban || true
 
   info "Fail2ban is active and protecting SSH."
+}
+
+configure_ufw_docker() {
+  info "Configuring UFW and Docker compatibility."
+
+  if grep -q 'DEFAULT_FORWARD_POLICY="DROP"' /etc/default/ufw; then
+    sed -i 's/DEFAULT_FORWARD_POLICY="DROP"/DEFAULT_FORWARD_POLICY="ACCEPT"/' /etc/default/ufw
+    info "Set DEFAULT_FORWARD_POLICY to ACCEPT."
+  fi
+
+  if ! grep -q "BEGIN UFW AND DOCKER" /etc/ufw/after.rules; then
+    cat >> /etc/ufw/after.rules <<'UFWDOCKER'
+
+# BEGIN UFW AND DOCKER
+*filter
+:ufw-user-forward - [0:0]
+:DOCKER-USER - [0:0]
+-A DOCKER-USER -j RETURN -s 10.0.0.0/8
+-A DOCKER-USER -j RETURN -s 172.16.0.0/12
+-A DOCKER-USER -j RETURN -s 192.168.0.0/16
+-A DOCKER-USER -j ufw-user-forward
+-A DOCKER-USER -j DROP -p tcp -m tcp --tcp-flags FIN,SYN,RST,ACK SYN -d 192.168.0.0/16
+-A DOCKER-USER -j DROP -p tcp -m tcp --tcp-flags FIN,SYN,RST,ACK SYN -d 10.0.0.0/8
+-A DOCKER-USER -j DROP -p tcp -m tcp --tcp-flags FIN,SYN,RST,ACK SYN -d 172.16.0.0/12
+-A DOCKER-USER -j DROP -p udp -m udp --dport 0:32767 -d 192.168.0.0/16
+-A DOCKER-USER -j DROP -p udp -m udp --dport 0:32767 -d 10.0.0.0/8
+-A DOCKER-USER -j DROP -p udp -m udp --dport 0:32767 -d 172.16.0.0/12
+-A DOCKER-USER -j RETURN
+COMMIT
+# END UFW AND DOCKER
+UFWDOCKER
+    info "Added Docker compatibility rules to UFW."
+  else
+    info "Docker compatibility rules already present in UFW."
+  fi
+
+  ufw reload >/dev/null 2>&1 || true
+
+  info "UFW and Docker compatibility configured."
 }
 
 main() {
@@ -226,6 +313,8 @@ main() {
 
   ask_domain
 
+  ask_password
+
   info "Installing prerequisites."
 
   export DEBIAN_FRONTEND=noninteractive
@@ -255,6 +344,8 @@ main() {
   setup_firewall
 
   setup_fail2ban
+
+  configure_ufw_docker
 
   local existing
 
@@ -294,8 +385,6 @@ main() {
 
   mkdir -m 0700 "$DIR"
   INSTALL_STARTED=1
-
-  PASSWORD="$(openssl rand -hex 24)"
 
   cat > "$DIR/compose.yaml" <<'COMPOSE'
 services:
