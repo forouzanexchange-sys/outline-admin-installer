@@ -143,6 +143,57 @@ install_docker() {
   docker compose version >/dev/null
 }
 
+setup_firewall() {
+  info "Configuring UFW firewall."
+
+  if ! command -v ufw >/dev/null 2>&1; then
+    DEBIAN_FRONTEND=noninteractive apt-get install -y ufw
+  fi
+
+  # Allow SSH first to prevent lockout
+  ufw allow 22/tcp comment 'SSH' >/dev/null
+  # Allow HTTP and HTTPS for Caddy
+  ufw allow 80/tcp comment 'HTTP - Caddy' >/dev/null
+  ufw allow 443/tcp comment 'HTTPS - Caddy' >/dev/null
+
+  # Enable firewall non-interactively
+  if ! ufw status | grep -q "Status: active"; then
+    ufw --force enable >/dev/null
+    info "UFW enabled with rules: 22, 80, 443."
+  else
+    info "UFW is already active. Required rules ensured."
+  fi
+}
+
+setup_fail2ban() {
+  info "Installing and configuring Fail2ban."
+
+  if ! command -v fail2ban-client >/dev/null 2>&1; then
+    DEBIAN_FRONTEND=noninteractive apt-get install -y fail2ban
+  fi
+
+  # Write a simple jail.local for SSH protection
+  if [[ ! -f /etc/fail2ban/jail.local ]]; then
+    cat > /etc/fail2ban/jail.local <<'F2B'
+[DEFAULT]
+bantime  = 1h
+findtime = 10m
+maxretry = 5
+backend  = systemd
+
+[sshd]
+enabled = true
+port    = 22
+F2B
+    chmod 0644 /etc/fail2ban/jail.local
+  fi
+
+  systemctl enable fail2ban >/dev/null 2>&1 || true
+  systemctl restart fail2ban || true
+
+  info "Fail2ban is active and protecting SSH."
+}
+
 main() {
   [[ "$EUID" -eq 0 ]] ||
     die "Run this installer as root: sudo bash install.sh"
@@ -200,6 +251,10 @@ main() {
   done
 
   install_docker
+
+  setup_firewall
+
+  setup_fail2ban
 
   local existing
 
@@ -351,13 +406,19 @@ CREDS
     dc logs --tail=40 caddy || true
   fi
 
-  printf '\nPanel URL: https://%s\n' "$DOMAIN"
-  printf 'Login: password only; no username required.\n'
-  printf 'View credentials: sudo cat %s/credentials.txt\n' "$DIR"
-  printf 'Check services: cd %s && sudo docker compose ps\n' "$DIR"
-  printf 'Check logs: cd %s && sudo docker compose logs --tail=80 caddy\n' "$DIR"
-  printf 'Next: add your Outline Server API credentials in the panel.\n'
-  printf 'Outline Server itself is NOT installed by this script.\n'
+  printf '\n=========================================\n'
+  printf '           Installation Summary\n'
+  printf '=========================================\n'
+  printf 'Panel URL       : https://%s\n' "$DOMAIN"
+  printf 'Login           : password only; no username required\n'
+  printf 'Credentials     : sudo cat %s/credentials.txt\n' "$DIR"
+  printf 'Services status : cd %s && sudo docker compose ps\n' "$DIR"
+  printf 'Caddy logs      : cd %s && sudo docker compose logs --tail=80 caddy\n' "$DIR"
+  printf 'Firewall status : sudo ufw status numbered\n'
+  printf 'Fail2ban status : sudo fail2ban-client status sshd\n'
+  printf '\nNext step       : add your Outline Server API credentials in the panel.\n'
+  printf 'Note            : Outline Server itself is NOT installed by this script.\n'
+  printf '=========================================\n'
 }
 
 main "$@" </dev/null
