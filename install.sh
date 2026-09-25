@@ -195,92 +195,6 @@ install_docker() {
   docker compose version >/dev/null
 }
 
-setup_firewall() {
-  info "Configuring UFW firewall."
-
-  if ! command -v ufw >/dev/null 2>&1; then
-    DEBIAN_FRONTEND=noninteractive apt-get install -y ufw
-  fi
-
-  ufw allow 22/tcp comment 'SSH' >/dev/null
-  ufw allow 80/tcp comment 'HTTP - Caddy' >/dev/null
-  ufw allow 443/tcp comment 'HTTPS - Caddy' >/dev/null
-
-  if ! ufw status | grep -q "Status: active"; then
-    ufw --force enable >/dev/null
-    info "UFW enabled with rules: 22, 80, 443."
-  else
-    info "UFW is already active. Required rules ensured."
-  fi
-}
-
-setup_fail2ban() {
-  info "Installing and configuring Fail2ban."
-
-  if ! command -v fail2ban-client >/dev/null 2>&1; then
-    DEBIAN_FRONTEND=noninteractive apt-get install -y fail2ban
-  fi
-
-  if [[ ! -f /etc/fail2ban/jail.local ]]; then
-    cat > /etc/fail2ban/jail.local <<'F2B'
-[DEFAULT]
-bantime  = 1h
-findtime = 10m
-maxretry = 5
-backend  = systemd
-
-[sshd]
-enabled = true
-port    = 22
-F2B
-    chmod 0644 /etc/fail2ban/jail.local
-  fi
-
-  systemctl enable fail2ban >/dev/null 2>&1 || true
-  systemctl restart fail2ban || true
-
-  info "Fail2ban is active and protecting SSH."
-}
-
-configure_ufw_docker() {
-  info "Configuring UFW and Docker compatibility."
-
-  if grep -q 'DEFAULT_FORWARD_POLICY="DROP"' /etc/default/ufw; then
-    sed -i 's/DEFAULT_FORWARD_POLICY="DROP"/DEFAULT_FORWARD_POLICY="ACCEPT"/' /etc/default/ufw
-    info "Set DEFAULT_FORWARD_POLICY to ACCEPT."
-  fi
-
-  if ! grep -q "BEGIN UFW AND DOCKER" /etc/ufw/after.rules; then
-    cat >> /etc/ufw/after.rules <<'UFWDOCKER'
-
-# BEGIN UFW AND DOCKER
-*filter
-:ufw-user-forward - [0:0]
-:DOCKER-USER - [0:0]
--A DOCKER-USER -j RETURN -s 10.0.0.0/8
--A DOCKER-USER -j RETURN -s 172.16.0.0/12
--A DOCKER-USER -j RETURN -s 192.168.0.0/16
--A DOCKER-USER -j ufw-user-forward
--A DOCKER-USER -j DROP -p tcp -m tcp --tcp-flags FIN,SYN,RST,ACK SYN -d 192.168.0.0/16
--A DOCKER-USER -j DROP -p tcp -m tcp --tcp-flags FIN,SYN,RST,ACK SYN -d 10.0.0.0/8
--A DOCKER-USER -j DROP -p tcp -m tcp --tcp-flags FIN,SYN,RST,ACK SYN -d 172.16.0.0/12
--A DOCKER-USER -j DROP -p udp -m udp --dport 0:32767 -d 192.168.0.0/16
--A DOCKER-USER -j DROP -p udp -m udp --dport 0:32767 -d 10.0.0.0/8
--A DOCKER-USER -j DROP -p udp -m udp --dport 0:32767 -d 172.16.0.0/12
--A DOCKER-USER -j RETURN
-COMMIT
-# END UFW AND DOCKER
-UFWDOCKER
-    info "Added Docker compatibility rules to UFW."
-  else
-    info "Docker compatibility rules already present in UFW."
-  fi
-
-  ufw reload >/dev/null 2>&1 || true
-
-  info "UFW and Docker compatibility configured."
-}
-
 main() {
   [[ "$EUID" -eq 0 ]] ||
     die "Run this installer as root: sudo bash install.sh"
@@ -340,12 +254,6 @@ main() {
   done
 
   install_docker
-
-  setup_firewall
-
-  setup_fail2ban
-
-  configure_ufw_docker
 
   local existing
 
@@ -503,8 +411,6 @@ CREDS
   printf 'Credentials     : sudo cat %s/credentials.txt\n' "$DIR"
   printf 'Services status : cd %s && sudo docker compose ps\n' "$DIR"
   printf 'Caddy logs      : cd %s && sudo docker compose logs --tail=80 caddy\n' "$DIR"
-  printf 'Firewall status : sudo ufw status numbered\n'
-  printf 'Fail2ban status : sudo fail2ban-client status sshd\n'
   printf '\nNext step       : add your Outline Server API credentials in the panel.\n'
   printf 'Note            : Outline Server itself is NOT installed by this script.\n'
   printf '=========================================\n'
